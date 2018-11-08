@@ -48,9 +48,29 @@ const tokenBalance = sequelize.define('token_balance', {
     balance: { type: Sequelize.BIGINT, allowNull: false}
 });
 
+const user = sequelize.define('user', {
+    idx: { type: Sequelize.BIGINT, allowNull: false, primaryKey: true, autoIncrement: true },
+    user_id: { type: Sequelize.STRING(45), allowNull: false },
+    token: { type: Sequelize.BIGINT, defaultValue: 0, allowNull: false },
+    point: { type: Sequelize.BIGINT, defaultValue: 0, allowNull: false },
+    address: { type: Sequelize.STRING(42), allowNull: false },
+    priv_key: { type: Sequelize.STRING(66), allowNull: false },
+    create_dt: { type: Sequelize.DATE, allowNull: false },
+    update_dt: { type: Sequelize.DATE, allowNull: false }
+});
+
 module.exports = {
     getBlockchainInfo: async function (name) {
         return await blockchain.findOne({
+            where: {
+                name: name
+            }
+        });
+    },
+    updateBlockchainInfo: async function (name, blockNumber) {
+        return await blockchain.update({
+            block_number: blockNumber,
+        }, {
             where: {
                 name: name
             }
@@ -64,5 +84,8 @@ module.exports = {
             address: address,
             balance: balance
         });
+    },
+    createUser: async function (userInfo) {
+        return await user.build(userInfo).save();
     }
 };

@@ -1,114 +1,44 @@
+const watcher = require ('./watcher');
 const config = require('./config');
-const abi = require('./abi');
-const Web3 = require('web3');
 const Repository = require('./repository');
+const Express = require('express');
+const Parser = require('body-parser');
+const Web3 = require('web3');
 
 const web3 = new Web3(new Web3.providers.HttpProvider(config.mainnet.host));
-const erc20 = new web3.eth.Contract(abi.token, config.mainnet.tokenAddress);
 
+const app = Express();
+app.use(Parser.json());
+app.use(Parser.urlencoded({ extended: true }));
 
-var blockNumber;
+watcher.startWatching();
 
-async function getBlockchainInfo() {
-    var blockInfo = await Repository.getBlockchainInfo('eth-mainnet');
-    console.log(JSON.stringify(blockInfo));
-}
+app.post('/user/create', async (req, res) => {
+    console.log('user-create requested');
+    console.log('user_id: ' + req.body.user_id);
+    
+    const account = web3.eth.accounts.create();
+    console.log('created account: ' + JSON.stringify(account));
 
-// getBlockchainInfo();
+    const now = new Date();
+    Repository.createUser({
+        user_id: req.body.user_id,
+        address: account.address,
+        priv_key: account.privateKey,
+        create_dt: now,
+        update_dt: now
+    }).then(() => {
+        console.log('user created');
+    })
+    .catch(console.error);
+    
 
-// Repository.getBlockchainInfo('eth-mainnet').then(blockInfo => {
-//     console.log(JSON.stringify(blockInfo))
-//     process.exit();
-// });
+    res.send('user_id: ' + req.body.user_id);
+});
 
-function startWatching() {
-    setInterval(() => {
-        web3.eth.getBlockNumber().then(number => {
-            blockNumber = number;
-            web3.eth.getBlock(blockNumber).then(block => {
-                // console.log(JSON.stringify(block));
-                block.transactions.forEach((txHash, id) => {
-                    web3.eth.getTransaction(txHash).then(txInfo => {
-                        // console.log(JSON.stringify(txInfo));
-                        txInfo['create_dt'] = new Date();
-                        txInfo['value'] = web3.utils.fromWei(txInfo['value'], 'ether');
-                        Repository.createTransaction(txInfo);
-                        if (txInfo.to && txInfo.to.toLowerCase() === config.mainnet.tokenAddress.toLowerCase()) {
-                            console.log(JSON.stringify(txInfo));
-                            var hash = txInfo.input.substring(2, 10).toLowerCase();
-                            switch (config.tokenFuncHash[hash]) {
-                                case 'mint':
-                                    //  owner의 balance를 조회해서 DB에 update
-                                    erc20.methods.owner().call()
-                                    .then(owner => {
-                                        erc20.methods.balanceOf(owner).call().then(balance => {
-                                            Repository.upsertTokenbalance(owner, balance);
-                                        });
-                                    });                                    
-                                    break;
-                                case 'transfer':
+app.get('/user/:idx', async (req, res) => {
+    console.log('get userinfo : ' + req.params.idx);
+    res.send('You have requested to get user[' + req.params.idx + '].')
+});
 
-                                    var params = web3.eth.abi.decodeParameters(abi.transferInputs, txInfo.input.substring(11));
-
-                                    var to = params[0];
-                                    var value = web3.utils.hexToNumber(params[1]);
-                                    console.log('params: to - ' + to + ', value - ' + value);
-                                    erc20.methods.balanceOf(txInfo.from).call().then(result => {
-                                        console.log('balanceOf From: ' + JSON.stringify(result));
-                                        Repository.upsertTokenbalance(txInfo.from, result);
-                                    });
-                                    erc20.methods.balanceOf(to).call().then(result => {
-                                        console.log('balanceOf To: ' + JSON.stringify(result));
-                                        Repository.upsertTokenbalance(to, result);
-                                    });
-                                    break;
-                                case 'transferFrom':
-                                    var params = web3.eth.abi.decodeParameters(abi.transferFromInputs, txInfo.input.substring(11));
-
-                                    var from = params[0];
-                                    var to = params[1];
-                                    var value = web3.utils.hexToNumber(params[2]);
-                                    console.log('params: from - ' + from + 'to - ' + to + ', value - ' + value);
-                                    erc20.methods.balanceOf(txInfo.from).call().then(result => {
-                                        console.log('balanceOf From: ' + JSON.stringify(result));
-                                        Repository.upsertTokenbalance(from, result);
-                                    });
-                                    erc20.methods.balanceOf(to).call().then(result => {
-                                        console.log('balanceOf To: ' + JSON.stringify(result));
-                                        Repository.upsertTokenbalance(to, result);
-                                    });
-                                    
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                    });
-                })
-            });
-        })
-    }, 1000);
-}
-
-startWatching();
-
-// 0x66548ba3e6d334f20566da16ffdf9e5d4aff4fe4
-// 66548ba3e6d334f20566da16ffdf9e5d4aff4fe40
-// 000000000000000000000000bf2bdb676775b023ee2f1227efb679aa50263d9d
-
-// 유저 테이블 설계
-//     - idx : autoIncremental
-//     - id : string
-//     - priv_net_address
-//     - priv_key
-//     - balance
-//     - token -> gold -> skillpoint (1분당 하나씩) -> 캐릭터 성장
-
-// express 설치
-// body parser (JSON.parsing) 설치
-
-//  ERC20   minting 여러번 할 수 있도록 수정, owner만 할수 있도록
-
-
-// API 설계해서 미리 만들어 넣고, 기본 응답되도록 구현
-
+const server = app.listen(8088, () => console.log);
