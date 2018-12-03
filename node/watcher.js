@@ -46,6 +46,7 @@ async function syncToDB(blockNumber) {
                             erc20.methods.balanceOf(to).call().then(result => {
                                 console.log('balanceOf To: ' + JSON.stringify(result));
                                 Repository.upsertTokenbalance(to, result);
+                                Repository.updateUserToken(to, value);
                             });
                             break;
                         case 'transferFrom':
